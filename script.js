@@ -47,6 +47,32 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let assets = [];
+  const positionsChartTools = JSON.parse(localStorage.getItem('positionsChartTools') || '{"indicators":[],"candleStyle":{"bodyWidth":58,"wickWidth":1}}');
+
+  function savePositionsChartTools() {
+    localStorage.setItem('positionsChartTools', JSON.stringify(positionsChartTools));
+  }
+
+  function calculateIndicator(values, type, period) {
+    const output = [];
+    let previous = values[0];
+    values.forEach((value, index) => {
+      if (index < period - 1) {
+        output.push(null);
+        return;
+      }
+      if (type === 'ema') {
+        const multiplier = 2 / (period + 1);
+        previous = index === period - 1
+          ? values.slice(0, period).reduce((sum, item) => sum + item, 0) / period
+          : (value - previous) * multiplier + previous;
+        output.push(previous);
+        return;
+      }
+      output.push(values.slice(index - period + 1, index + 1).reduce((sum, item) => sum + item, 0) / period);
+    });
+    return output;
+  }
 
   function getCustomCoins() {
     const savedCoins = JSON.parse(localStorage.getItem('customCoins') || '[]');
@@ -136,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
       context.stroke();
       context.fillText(formatPrice(value), width - padding.right + 8, lineY + 4);
     }
-    const candleWidth = Math.max(4, xStep * .58);
+    const candleWidth = Math.max(4, xStep * (positionsChartTools.candleStyle.bodyWidth / 100));
     candles.forEach((candle, index) => {
       const pointX = padding.left + index * xStep;
       const color = candle.close >= candle.open ? '#31d598' : '#ff6b7a';
@@ -145,9 +171,30 @@ document.addEventListener('DOMContentLoaded', () => {
       context.beginPath();
       context.moveTo(pointX, y(candle.high));
       context.lineTo(pointX, y(candle.low));
-      context.stroke();
+          context.lineWidth = positionsChartTools.candleStyle.wickWidth;
+          context.stroke();
       context.fillRect(pointX - candleWidth / 2, y(Math.max(candle.open, candle.close)), candleWidth, Math.max(2, Math.abs(y(candle.open) - y(candle.close))));
       if (index === 0 || index === candles.length - 1 || index % 9 === 0) context.fillText(formatTime(candle.time), pointX - 18, height - 12);
+    });
+
+    positionsChartTools.indicators.forEach((indicator) => {
+      const values = calculateIndicator(source, indicator.type, indicator.period);
+      context.beginPath();
+      context.lineWidth = 2;
+      context.strokeStyle = indicator.color;
+      let started = false;
+      values.forEach((value, index) => {
+        if (value === null) return;
+        const pointX = padding.left + index * xStep;
+        const pointY = y(value);
+        if (!started) {
+          context.moveTo(pointX, pointY);
+          started = true;
+        } else {
+          context.lineTo(pointX, pointY);
+        }
+      });
+      if (started) context.stroke();
     });
     positionsChartTitle.textContent = `${asset.symbol.toUpperCase()} / USD`;
     positionsChartPrice.textContent = formatPrice(candles[candles.length - 1].close);
@@ -344,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setSelectedSymbol(symbol) {
     marketConfig.selectedSymbol = symbol;
-    if (positionsMarketSelect && ['BTC', 'XRP', 'BNB', 'ETH'].includes(symbol)) {
+    if (positionsMarketSelect && positionsMarketSelect.querySelector(`option[value="${symbol}"]`)) {
       positionsMarketSelect.value = symbol;
     }
     if (chartTitle) {
@@ -382,6 +429,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const customAssets = getCustomAssets();
       assets = [...customAssets, ...assets.filter((asset) => !customAssets.some((customAsset) => customAsset.symbol === asset.symbol))];
       addCustomMarketOptions(customAssets);
+
+      if (customAssets.length && marketConfig.selectedSymbol === 'XRP') {
+        marketConfig.selectedSymbol = customAssets[customAssets.length - 1].symbol;
+      }
 
       if (!assets.length) {
         return;
@@ -513,15 +564,47 @@ document.addEventListener('DOMContentLoaded', () => {
       positionsToolsButton.setAttribute('aria-expanded', 'false');
       if (tool.dataset.chartTool === 'import') {
         const imported = window.prompt('Paste indicator JSON');
-        positionsChartStatus.textContent = imported ? 'Indicator imported for the selected market.' : 'Indicator import cancelled.';
+        if (!imported) {
+          positionsChartStatus.textContent = 'Indicator import cancelled.';
+          return;
+        }
+        try {
+          const indicator = JSON.parse(imported);
+          if (!indicator.name || !['sma', 'ema'].includes(indicator.type)) throw new Error('Unsupported indicator');
+          const period = Number(indicator.period);
+          if (!Number.isInteger(period) || period < 2 || period > 100) throw new Error('Invalid period');
+          positionsChartTools.indicators.push({ name: indicator.name, type: indicator.type, period, color: indicator.color || '#f3c969' });
+          savePositionsChartTools();
+          drawPositionsChart();
+          positionsChartStatus.textContent = `${indicator.name} imported and drawn on the selected market.`;
+        } catch (error) {
+          positionsChartStatus.textContent = 'Import failed. Use JSON with name, type (sma or ema), period, and optional color.';
+        }
       }
       if (tool.dataset.chartTool === 'create') {
         const name = window.prompt('Indicator name');
-        const period = window.prompt('Period', '20');
-        positionsChartStatus.textContent = name && period ? `${name} created with a ${period}-period setting.` : 'Indicator creation cancelled.';
+        const type = (window.prompt('Indicator type: sma or ema', 'sma') || '').toLowerCase();
+        const period = Number(window.prompt('Period (2-100)', '20'));
+        if (!name || !['sma', 'ema'].includes(type) || !Number.isInteger(period) || period < 2 || period > 100) {
+          positionsChartStatus.textContent = 'Indicator creation cancelled or invalid.';
+          return;
+        }
+        positionsChartTools.indicators.push({ name, type, period, color: '#ffb86b' });
+        savePositionsChartTools();
+        drawPositionsChart();
+        positionsChartStatus.textContent = `${name} ${type.toUpperCase()} (${period}) is now drawn on the selected market.`;
       }
       if (tool.dataset.chartTool === 'custom-candles') {
-        positionsChartStatus.textContent = 'Custom candlesticks selected. The chart is using OHLC candles with local timestamps.';
+        const bodyWidth = Number(window.prompt('Candle body width (10-90%)', String(positionsChartTools.candleStyle.bodyWidth)));
+        const wickWidth = Number(window.prompt('Candle wick width (1-5px)', String(positionsChartTools.candleStyle.wickWidth)));
+        if (!Number.isFinite(bodyWidth) || !Number.isFinite(wickWidth) || bodyWidth < 10 || bodyWidth > 90 || wickWidth < 1 || wickWidth > 5) {
+          positionsChartStatus.textContent = 'Custom candlestick settings cancelled or invalid.';
+          return;
+        }
+        positionsChartTools.candleStyle = { bodyWidth, wickWidth };
+        savePositionsChartTools();
+        drawPositionsChart();
+        positionsChartStatus.textContent = `Custom candlesticks applied: ${bodyWidth}% body width and ${wickWidth}px wick width.`;
       }
     });
   });
