@@ -54,6 +54,39 @@
           </div>
         </div>
 
+        <section class="favorite-panel card-glass" aria-labelledby="favoriteCoinsTitle">
+          <div class="favorite-panel-head">
+            <div>
+              <span class="eyebrow">Market watchlist</span>
+              <h3 id="favoriteCoinsTitle">Favorite coins for AI analysis</h3>
+              <p>Choose coins the bot should watch. Market cap and live market signals guide its settings.</p>
+            </div>
+            <div class="favorite-add-control">
+              <label for="favoriteCoinSelect">Add favorite</label>
+              <div class="favorite-add-row">
+                <select id="favoriteCoinSelect">
+                  <option value="">Choose a coin</option>
+                  <option value="BTC">Bitcoin (BTC)</option>
+                  <option value="ETH">Ethereum (ETH)</option>
+                  <option value="XRP">XRP (XRP)</option>
+                  <option value="SOL">Solana (SOL)</option>
+                  <option value="ADA">Cardano (ADA)</option>
+                  <option value="DOT">Polkadot (DOT)</option>
+                  <option value="DOGE">Dogecoin (DOGE)</option>
+                  <option value="USDT">Tether (USDT)</option>
+                </select>
+                <button class="btn btn-primary" type="button" id="addFavoriteBtn">Add</button>
+              </div>
+            </div>
+          </div>
+          <div class="favorite-slider">
+            <button class="favorite-slide-btn" type="button" id="favoritePrevBtn" aria-label="Show previous favorite coins">&#8592;</button>
+            <div class="favorite-cards" id="favoriteCards" aria-live="polite"></div>
+            <button class="favorite-slide-btn" type="button" id="favoriteNextBtn" aria-label="Show next favorite coins">&#8594;</button>
+          </div>
+          <p class="favorite-analysis-status" id="favoriteAnalysisStatus">Add a favorite coin to start personalized market analysis.</p>
+        </section>
+
         <div class="bot-layout">
           <div class="card-glass bot-controls">
             <h3>Bot Settings</h3>
@@ -138,10 +171,6 @@
               </div>
             </div>
 
-            <div class="bot-actions">
-              <button class="btn btn-primary" type="button" id="startBotBtn">Start bot</button>
-              <button class="btn btn-ghost" type="button" id="pauseBotBtn">Pause bot</button>
-            </div>
           </div>
 
           <div class="card-glass bot-stream">
@@ -210,7 +239,14 @@
                   <strong id="botTrades">0</strong>
                 </div>
               </div>
-              <canvas id="botCanvas" width="600" height="240" aria-label="BillionairesXchange live trading bot chart"></canvas>
+              <div class="bot-chart-wrap">
+                <canvas id="botCanvas" width="600" height="320" aria-label="BillionairesXchange live trading bot candlestick chart"></canvas>
+                <button class="bot-chart-resizer" id="botChartResizer" type="button" aria-label="Resize bot chart" title="Drag to resize chart"></button>
+              </div>
+              <div class="bot-actions">
+                <button class="btn btn-primary" type="button" id="startBotBtn">Start bot</button>
+                <button class="btn btn-ghost" type="button" id="pauseBotBtn">Pause bot</button>
+              </div>
               <p id="botMarketStatus" class="bot-market-status">Select a coin to connect its live spot market.</p>
             </div>
 
@@ -268,6 +304,8 @@
       const strategy = document.getElementById('strategy');
       const toast = document.getElementById('toast');
       const botCanvas = document.getElementById('botCanvas');
+      const botChartWrap = document.querySelector('.bot-chart-wrap');
+      const botChartResizer = document.getElementById('botChartResizer');
       const tradeFeed = document.getElementById('tradeFeed');
       const botPnl = document.getElementById('botPnl');
       const botBalance = document.getElementById('botBalance');
@@ -286,6 +324,12 @@
       const aiTrend = document.getElementById('aiTrend');
       const aiVolatility = document.getElementById('aiVolatility');
       const aiUpdated = document.getElementById('aiUpdated');
+      const favoriteCoinSelect = document.getElementById('favoriteCoinSelect');
+      const addFavoriteBtn = document.getElementById('addFavoriteBtn');
+      const favoriteCards = document.getElementById('favoriteCards');
+      const favoritePrevBtn = document.getElementById('favoritePrevBtn');
+      const favoriteNextBtn = document.getElementById('favoriteNextBtn');
+      const favoriteAnalysisStatus = document.getElementById('favoriteAnalysisStatus');
 
       manualBuyBtn.disabled = true;
       manualSellBtn.disabled = true;
@@ -318,6 +362,65 @@
 
       const marketPairs = { BTC: 'BTCUSDT', ETH: 'ETHUSDT', XRP: 'XRPUSDT', SOL: 'SOLUSDT', ADA: 'ADAUSDT', DOT: 'DOTUSDT', DOGE: 'DOGEUSDT' };
 
+      function getCustomCoins() {
+        const savedCoins = JSON.parse(localStorage.getItem('customCoins') || '[]');
+        const legacyCoin = JSON.parse(localStorage.getItem('createdCoin') || 'null');
+        const coins = legacyCoin && !savedCoins.some((coin) => coin.symbol === legacyCoin.symbol)
+          ? [...savedCoins, legacyCoin]
+          : savedCoins;
+        return coins.filter((coin) => coin.name && /^[A-Z0-9]{2,8}$/.test(coin.symbol));
+      }
+
+      function createCustomMarketData(coin) {
+        const seed = [...(coin.symbol + coin.name)].reduce((total, character) => total + character.charCodeAt(0), 0);
+        return {
+          marketCap: Math.max(250000, (seed % 8000) * 1250),
+          change24h: ((seed % 170) - 85) / 10,
+          currentPrice: Math.max(0.01, (seed % 9000) / 100 + 1),
+          custom: true
+        };
+      }
+
+      const coinMarketIds = {
+        BTC: 'bitcoin',
+        ETH: 'ethereum',
+        XRP: 'ripple',
+        SOL: 'solana',
+        ADA: 'cardano',
+        DOT: 'polkadot',
+        DOGE: 'dogecoin',
+        USDT: 'tether'
+      };
+
+      const fallbackMarketData = {
+        BTC: { marketCap: 1.3e12, change24h: 0 },
+        ETH: { marketCap: 4.1e11, change24h: 0 },
+        XRP: { marketCap: 3.4e10, change24h: 0 },
+        SOL: { marketCap: 7.4e10, change24h: 0 },
+        ADA: { marketCap: 2.7e10, change24h: 0 },
+        DOT: { marketCap: 1.2e10, change24h: 0 },
+        DOGE: { marketCap: 2.6e10, change24h: 0 },
+        USDT: { marketCap: 1.2e11, change24h: 0 }
+      };
+
+      const favoriteState = {
+        favorites: JSON.parse(localStorage.getItem('botFavoriteCoins') || '[]'),
+        marketData: {}
+      };
+
+      getCustomCoins().forEach((coin) => {
+        const market = createCustomMarketData(coin);
+        coinPrices[coin.symbol] = market.currentPrice;
+        favoriteState.marketData[coin.symbol] = market;
+        coinMarketIds[coin.symbol] = null;
+        const option = document.createElement('option');
+        option.value = coin.symbol;
+        option.textContent = `${coin.name} (${coin.symbol})`;
+        coinSelect.appendChild(option);
+        const favoriteOption = option.cloneNode(true);
+        favoriteCoinSelect.appendChild(favoriteOption);
+      });
+
       const leaderboardScores = {
         Momentum: 86,
         Scalp: 72,
@@ -343,6 +446,156 @@
           currency: 'USD',
           maximumFractionDigits: value >= 1000 ? 2 : 4
         }).format(value);
+      }
+
+      function formatCompactMoney(value) {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          notation: 'compact',
+          maximumFractionDigits: 1
+        }).format(value);
+      }
+
+      function getFavoriteMarketData(symbol) {
+        return favoriteState.marketData[symbol] || fallbackMarketData[symbol] || { marketCap: 0, change24h: 0 };
+      }
+
+      function saveFavorites() {
+        localStorage.setItem('botFavoriteCoins', JSON.stringify(favoriteState.favorites));
+      }
+
+      function getAutomaticSettings(symbol) {
+        const market = getFavoriteMarketData(symbol);
+        const marketCap = market.marketCap;
+        let settings = marketCap >= 300e9
+          ? { risk: 'Balanced', strategy: 'Momentum', duration: '24h', stopLoss: 4, takeProfit: 8 }
+          : marketCap >= 25e9
+            ? { risk: 'Balanced', strategy: 'Momentum', duration: '12h', stopLoss: 5, takeProfit: 10 }
+            : { risk: 'Aggressive', strategy: 'Scalp', duration: '4h', stopLoss: 3, takeProfit: 12 };
+
+        if (symbol === 'USDT') {
+          settings = { risk: 'Conservative', strategy: 'Dollar-cost averaging', duration: '7d', stopLoss: 1, takeProfit: 2 };
+        } else if (market.change24h <= -5) {
+          settings = { risk: 'Conservative', strategy: 'Dollar-cost averaging', duration: '24h', stopLoss: 3, takeProfit: 6 };
+        } else if (market.change24h >= 8) {
+          settings = { risk: 'Aggressive', strategy: 'Momentum', duration: '4h', stopLoss: 5, takeProfit: 15 };
+        }
+
+        return settings;
+      }
+
+      function applyAutomaticSettings(symbol) {
+        const settings = getAutomaticSettings(symbol);
+        riskLevel.value = settings.risk;
+        strategy.value = settings.strategy;
+        durationSelect.value = settings.duration;
+        stopLossInput.value = settings.stopLoss;
+        takeProfitInput.value = settings.takeProfit;
+        updateSummary();
+        favoriteAnalysisStatus.textContent = `AI profile for ${symbol}: ${settings.risk} risk, ${settings.strategy}, ${settings.duration} trading window.`;
+      }
+
+      function renderFavoriteCards() {
+        if (!favoriteState.favorites.length) {
+          favoriteCards.innerHTML = '<p class="favorite-empty">No favorite coins yet. Add one to begin automatic analysis.</p>';
+          favoritePrevBtn.disabled = true;
+          favoriteNextBtn.disabled = true;
+          return;
+        }
+
+        const activeSymbol = coinSelect.value;
+        favoriteCards.innerHTML = favoriteState.favorites.map((symbol) => {
+          const market = getFavoriteMarketData(symbol);
+          const change = Number(market.change24h) || 0;
+          const changeClass = change >= 0 ? 'positive' : 'negative';
+          const price = coinPrices[symbol] || market.currentPrice || 0;
+          return `
+            <div class="favorite-card${activeSymbol === symbol ? ' is-active' : ''}" data-symbol="${symbol}" role="button" tabindex="0" aria-label="Analyze ${symbol}">
+              <div class="favorite-card-top">
+                <strong>${symbol}</strong>
+                <span>${formatMoney(price)}</span>
+              </div>
+              <div class="favorite-card-value">
+                <span class="favorite-card-label">Market cap</span>
+                <strong>${formatCompactMoney(market.marketCap)}</strong>
+              </div>
+              <span class="favorite-card-change ${changeClass}">${change >= 0 ? '+' : ''}${change.toFixed(2)}% today</span>
+              <button class="favorite-remove" type="button" data-remove="${symbol}" aria-label="Remove ${symbol} from favorites">Remove</button>
+            </div>
+          `;
+        }).join('');
+
+        favoriteCards.querySelectorAll('.favorite-card').forEach((card) => {
+          const selectCard = () => selectFavorite(card.dataset.symbol);
+          card.addEventListener('click', (event) => {
+            if (!event.target.closest('.favorite-remove')) selectCard();
+          });
+          card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              selectCard();
+            }
+          });
+        });
+
+        favoriteCards.querySelectorAll('[data-remove]').forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const symbol = button.dataset.remove;
+            favoriteState.favorites = favoriteState.favorites.filter((favorite) => favorite !== symbol);
+            saveFavorites();
+            renderFavoriteCards();
+            if (coinSelect.value === symbol) {
+              coinSelect.value = '';
+              botMarketStatus.textContent = 'Select a favorite coin to connect its live spot market.';
+              updateSummary();
+            }
+          });
+        });
+
+        favoritePrevBtn.disabled = false;
+        favoriteNextBtn.disabled = false;
+      }
+
+      function selectFavorite(symbol) {
+        if (!coinMarketIds[symbol] && !favoriteState.marketData[symbol]?.custom) return;
+        applyAutomaticSettings(symbol);
+        coinSelect.value = symbol;
+        coinSelect.dispatchEvent(new Event('change'));
+        renderFavoriteCards();
+      }
+
+      async function refreshFavoriteMarketData() {
+        if (!favoriteState.favorites.length) return;
+        const ids = favoriteState.favorites.map((symbol) => coinMarketIds[symbol]).filter(Boolean).join(',');
+        if (!ids) {
+          renderFavoriteCards();
+          if (coinSelect.value) applyAutomaticSettings(coinSelect.value);
+          favoriteAnalysisStatus.textContent = 'Custom coin market data refreshed. The AI profile is using its local market feed.';
+          return;
+        }
+        try {
+          const response = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&per_page=20&page=1&sparkline=false&price_change_percentage=24h`);
+          if (!response.ok) throw new Error('Market cap data unavailable');
+          const markets = await response.json();
+          markets.forEach((market) => {
+            const symbol = Object.keys(coinMarketIds).find((key) => coinMarketIds[key] === market.id);
+            if (!symbol) return;
+            favoriteState.marketData[symbol] = {
+              marketCap: market.market_cap || 0,
+              change24h: market.price_change_percentage_24h || 0,
+              currentPrice: market.current_price || coinPrices[symbol]
+            };
+            coinPrices[symbol] = market.current_price || coinPrices[symbol];
+          });
+          renderFavoriteCards();
+          if (coinSelect.value) applyAutomaticSettings(coinSelect.value);
+          favoriteAnalysisStatus.textContent = `Market data refreshed at ${new Date().toLocaleTimeString()}. The AI profile updates with each refresh.`;
+        } catch (error) {
+          favoriteAnalysisStatus.textContent = 'Live market-cap data is temporarily unavailable. Using the latest available profile.';
+          renderFavoriteCards();
+        }
       }
 
       function updateSummary() {
@@ -428,39 +681,73 @@
       }
 
       function renderBotChart() {
+        if (!botState.history.length) return;
         const ctx = botCanvas.getContext('2d');
-        const width = botCanvas.width;
-        const height = botCanvas.height;
-        const padding = 18;
-        const min = Math.min(...botState.history);
-        const max = Math.max(...botState.history);
-        const range = max - min || 1;
-
-        ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = 'rgba(212,175,55,0.08)';
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.beginPath();
-        ctx.strokeStyle = '#d4af37';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = 'rgba(212,175,55,0.4)';
-        ctx.shadowBlur = 8;
-
-        botState.history.forEach((value, index) => {
-          const x = padding + (index / (botState.history.length - 1)) * (width - padding * 2);
-          const y = height - padding - ((value - min) / range) * (height - padding * 2);
-          if (index === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+        const bounds = botCanvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        const width = Math.max(320, bounds.width);
+        const height = 320;
+        botCanvas.width = width * ratio;
+        botCanvas.height = height * ratio;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        const history = botState.history.slice(-36);
+        const candles = history.map((close, index) => {
+          const open = index ? history[index - 1] : close;
+          const spread = Math.max(close * .006, .000001);
+          return { time: Date.now() - (history.length - index) * 60000, open, close, high: Math.max(open, close) + spread, low: Math.max(.000001, Math.min(open, close) - spread) };
         });
-
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        const padding = { top: 18, right: 76, bottom: 38, left: 12 };
+        const prices = candles.flatMap((candle) => [candle.high, candle.low]);
+        const min = Math.min(...prices) * .997;
+        const max = Math.max(...prices) * 1.003;
+        const xStep = (width - padding.left - padding.right) / Math.max(candles.length - 1, 1);
+        const y = (value) => padding.top + ((max - value) / (max - min || 1)) * (height - padding.top - padding.bottom);
+        const formatPrice = (value) => '$' + value.toLocaleString('en-US', { maximumFractionDigits: value < 1 ? 6 : 2 });
+        const formatTime = (time) => new Date(time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = 'rgba(0, 0, 0, .2)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.font = '11px Inter, sans-serif';
+        ctx.strokeStyle = 'rgba(212, 175, 55, .12)';
+        ctx.fillStyle = '#cfc5a2';
+        for (let row = 0; row < 5; row += 1) {
+          const value = min + (max - min) * row / 4;
+          const lineY = y(value);
+          ctx.beginPath();
+          ctx.moveTo(padding.left, lineY);
+          ctx.lineTo(width - padding.right, lineY);
+          ctx.stroke();
+          ctx.fillText(formatPrice(value), width - padding.right + 8, lineY + 4);
+        }
+        const candleWidth = Math.max(4, xStep * .58);
+        candles.forEach((candle, index) => {
+          const pointX = padding.left + index * xStep;
+          const color = candle.close >= candle.open ? '#31d598' : '#ff6b7a';
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(pointX, y(candle.high));
+          ctx.lineTo(pointX, y(candle.low));
+          ctx.stroke();
+          ctx.fillRect(pointX - candleWidth / 2, y(Math.max(candle.open, candle.close)), candleWidth, Math.max(2, Math.abs(y(candle.open) - y(candle.close))));
+          if (index === 0 || index === candles.length - 1 || index % 9 === 0) ctx.fillText(formatTime(candle.time), pointX - 18, height - 12);
+        });
       }
 
       async function connectLiveMarket(symbol) {
         if (botState.marketSocket) botState.marketSocket.close();
         const pair = marketPairs[symbol];
         if (!pair) {
+          const customMarket = favoriteState.marketData[symbol];
+          if (customMarket?.custom) {
+            const seed = Math.round(customMarket.currentPrice * 100);
+            botState.marketSymbol = `CUSTOM_${symbol}`;
+            botState.history = Array.from({ length: 30 }, (_, index) => customMarket.currentPrice * (1 + Math.sin((index + seed) / 3) * .03 + index * .001));
+            botMarketStatus.textContent = `${symbol} local market feed`;
+            analyzeMarket(symbol, customMarket.currentPrice);
+            renderBotChart();
+            return;
+          }
           botState.marketSymbol = null;
           botMarketStatus.textContent = 'Live spot data is unavailable for this selection.';
           return;
@@ -490,6 +777,7 @@
             botState.history.push(price);
             if (botState.history.length > 30) botState.history.shift();
           }
+          analyzeMarket(symbol, price);
           renderBotChart();
         };
         botState.marketSocket.onerror = () => {
@@ -518,7 +806,7 @@
               size,
               stopLoss: stopLoss,
               takeProfit: takeProfit,
-              strategy: strategyName
+              strategy: strategy.value
             };
             botState.balance -= size * tradePrice;
             notifyTrade(`AI BUY: ${symbol} at ${formatMoney(tradePrice)} (${analysis.confidence.toFixed(0)}% confidence).`);
@@ -615,6 +903,33 @@
         if (coinSelect.value) analyzeMarket(coinSelect.value, coinPrices[coinSelect.value] || 100);
       });
 
+      addFavoriteBtn.addEventListener('click', () => {
+        const symbol = favoriteCoinSelect.value;
+        if (!symbol) {
+          showToast('Choose a coin to add to your favorites.', 'warning');
+          return;
+        }
+        if (favoriteState.favorites.includes(symbol)) {
+          showToast(`${symbol} is already in your favorites.`, 'warning');
+          selectFavorite(symbol);
+          return;
+        }
+        favoriteState.favorites.push(symbol);
+        saveFavorites();
+        favoriteCoinSelect.value = '';
+        renderFavoriteCards();
+        selectFavorite(symbol);
+        refreshFavoriteMarketData();
+      });
+
+      favoritePrevBtn.addEventListener('click', () => {
+        favoriteCards.scrollBy({ left: -210, behavior: 'smooth' });
+      });
+
+      favoriteNextBtn.addEventListener('click', () => {
+        favoriteCards.scrollBy({ left: 210, behavior: 'smooth' });
+      });
+
       document.getElementById('startBotBtn').addEventListener('click', function() {
         if (!coinSelect.value || !durationSelect.value) {
           showToast('Please choose a coin and trading duration.', 'warning');
@@ -651,10 +966,43 @@
       manualBuyBtn.addEventListener('click', () => executeManualTrade('buy'));
       manualSellBtn.addEventListener('click', () => executeManualTrade('sell'));
 
+      if (botChartResizer && botChartWrap) {
+        botChartResizer.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          botChartResizer.setPointerCapture(event.pointerId);
+          const startX = event.clientX;
+          const startY = event.clientY;
+          const startWidth = botChartWrap.getBoundingClientRect().width;
+          const startHeight = botChartWrap.getBoundingClientRect().height;
+          const parentWidth = botChartWrap.parentElement.getBoundingClientRect().width;
+          const resizeChart = (moveEvent) => {
+            const nextWidth = Math.min(parentWidth, Math.max(320, startWidth + moveEvent.clientX - startX));
+            const nextHeight = Math.min(720, Math.max(260, startHeight + moveEvent.clientY - startY));
+            botChartWrap.style.width = `${nextWidth}px`;
+            botChartWrap.style.height = `${nextHeight}px`;
+            renderBotChart();
+          };
+          const stopResize = () => {
+            botChartResizer.removeEventListener('pointermove', resizeChart);
+            botChartResizer.removeEventListener('pointerup', stopResize);
+            botChartResizer.removeEventListener('pointercancel', stopResize);
+          };
+          botChartResizer.addEventListener('pointermove', resizeChart);
+          botChartResizer.addEventListener('pointerup', stopResize);
+          botChartResizer.addEventListener('pointercancel', stopResize);
+        });
+      }
+
+      favoriteState.favorites = favoriteState.favorites.filter((symbol) => coinMarketIds[symbol] || favoriteState.marketData[symbol]?.custom);
+      renderFavoriteCards();
+      if (favoriteState.favorites.length) selectFavorite(favoriteState.favorites[0]);
+      refreshFavoriteMarketData();
+      setInterval(refreshFavoriteMarketData, 60000);
       updateSummary();
       updateLeaderboard();
       updateStatusLabel();
       updatePerformancePanel();
+      window.addEventListener('resize', renderBotChart);
       renderBotChart();
     </script>
     <script src="script.js"></script>

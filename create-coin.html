@@ -72,7 +72,7 @@
               Publish fee
               <input type="number" name="publishFee" min="50" value="150" />
             </label>
-            <button class="btn btn-primary" type="submit">Publish to market</button>
+            <button class="btn coin-publish-button" type="submit">Publish to market</button>
           </form>
 
           <div class="card-glass custom-coin-list">
@@ -99,11 +99,12 @@
           <div class="coin-chart-wrap">
             <canvas id="coinCandleChart" aria-label="Candlestick chart for your created coin"></canvas>
             <p class="coin-chart-empty" id="coinChartEmpty">Your coin's 15-minute candles will appear here after publishing.</p>
+            <button class="coin-chart-resizer" id="coinChartResizer" type="button" aria-label="Resize chart" title="Drag to resize chart"></button>
           </div>
           <div class="coin-order-bar">
             <div>
-              <h4>Stop market order</h4>
-              <p>Trigger a market sell or buy when your coin reaches the stop price.</p>
+                <h4>Market Order</h4>
+              <p>Place a market buy or sell using the latest available coin price.</p>
             </div>
             <form class="stop-market-form" id="stopMarketForm">
               <label>
@@ -114,14 +115,14 @@
                 </select>
               </label>
               <label>
-                Stop price
+                Order price
                 <input id="stopMarketPrice" type="number" min="0.000001" step="0.000001" placeholder="0.000000" required />
               </label>
               <label>
                 Quantity
                 <input id="stopMarketQuantity" type="number" min="0.000001" step="0.000001" placeholder="100" required />
               </label>
-              <button class="btn btn-danger" type="submit">Place stop market</button>
+              <button class="btn btn-danger" id="stopMarketSubmit" type="submit">Place Sell Market</button>
             </form>
           </div>
           <p class="coin-order-status" id="stopMarketStatus" role="status"></p>
@@ -190,8 +191,13 @@
       const coinMarketTitle = document.getElementById('coinMarketTitle');
       const coinCurrentPrice = document.getElementById('coinCurrentPrice');
       const coinCandleStatus = document.getElementById('coinCandleStatus');
+      const coinChartWrap = document.querySelector('.coin-chart-wrap');
+      const coinChartResizer = document.getElementById('coinChartResizer');
       const stopMarketForm = document.getElementById('stopMarketForm');
+      const stopMarketSide = document.getElementById('stopMarketSide');
       const stopMarketPrice = document.getElementById('stopMarketPrice');
+      const stopMarketQuantity = document.getElementById('stopMarketQuantity');
+      const stopMarketSubmit = document.getElementById('stopMarketSubmit');
       const stopMarketStatus = document.getElementById('stopMarketStatus');
       let activeCoin = JSON.parse(localStorage.getItem('createdCoin') || 'null');
       let candles = [];
@@ -218,11 +224,11 @@
         const bounds = coinChart.getBoundingClientRect();
         const ratio = window.devicePixelRatio || 1;
         coinChart.width = Math.max(320, bounds.width * ratio);
-        coinChart.height = 310 * ratio;
+        const height = Math.max(260, coinChart.clientHeight || 310);
+        coinChart.height = height * ratio;
         const context = coinChart.getContext('2d');
-        context.scale(ratio, ratio);
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
         const width = Math.max(320, bounds.width);
-        const height = 310;
         const pad = { top: 22, right: 62, bottom: 36, left: 12 };
         const visibleCandles = candles.slice(-24);
         const prices = visibleCandles.flatMap((candle) => [candle.high, candle.low]);
@@ -277,7 +283,47 @@
       }
 
       if (activeCoin) showCoin(activeCoin);
+
+      function updateStopMarketButton() {
+        const isBuy = stopMarketSide.value === 'BUY';
+        stopMarketSubmit.textContent = isBuy ? 'Place Buy Market' : 'Place Sell Market';
+        stopMarketSubmit.classList.toggle('btn-buy-market', isBuy);
+        stopMarketSubmit.classList.toggle('btn-danger', !isBuy);
+        if (candles.length) {
+          stopMarketPrice.value = candles[candles.length - 1].close.toFixed(6);
+        }
+      }
+
+      stopMarketSide.addEventListener('change', updateStopMarketButton);
+      updateStopMarketButton();
       window.addEventListener('resize', drawCoinChart);
+      if (coinChartResizer && coinChartWrap) {
+        coinChartResizer.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          coinChartResizer.setPointerCapture(event.pointerId);
+          const startX = event.clientX;
+          const startY = event.clientY;
+          const startWidth = coinChartWrap.getBoundingClientRect().width;
+          const startHeight = coinChartWrap.getBoundingClientRect().height;
+          const parentWidth = coinChartWrap.parentElement.getBoundingClientRect().width;
+          const resizeChart = (moveEvent) => {
+            const nextWidth = Math.min(parentWidth, Math.max(320, startWidth + moveEvent.clientX - startX));
+            const nextHeight = Math.min(720, Math.max(260, startHeight + moveEvent.clientY - startY));
+            coinChartWrap.style.width = nextWidth + 'px';
+            coinChartWrap.style.height = nextHeight + 'px';
+            coinChartWrap.style.minHeight = nextHeight + 'px';
+            drawCoinChart();
+          };
+          const stopResize = () => {
+            coinChartResizer.removeEventListener('pointermove', resizeChart);
+            coinChartResizer.removeEventListener('pointerup', stopResize);
+            coinChartResizer.removeEventListener('pointercancel', stopResize);
+          };
+          coinChartResizer.addEventListener('pointermove', resizeChart);
+          coinChartResizer.addEventListener('pointerup', stopResize);
+          coinChartResizer.addEventListener('pointercancel', stopResize);
+        });
+      }
       coinForm.addEventListener('submit', (event) => {
         event.preventDefault();
         const formData = new FormData(event.target);
@@ -286,6 +332,14 @@
           symbol: formData.get('coinSymbol').trim().toUpperCase(),
           createdAt: Date.now()
         };
+        const savedCoins = JSON.parse(localStorage.getItem('customCoins') || '[]');
+        const existingIndex = savedCoins.findIndex((savedCoin) => savedCoin.symbol === coin.symbol);
+        if (existingIndex >= 0) {
+          savedCoins[existingIndex] = coin;
+        } else {
+          savedCoins.push(coin);
+        }
+        localStorage.setItem('customCoins', JSON.stringify(savedCoins));
         localStorage.setItem('createdCoin', JSON.stringify(coin));
         showCoin(coin);
         const toast = document.getElementById('toast');
@@ -301,10 +355,11 @@
           stopMarketStatus.textContent = 'Publish your coin before placing an order.';
           return;
         }
-        const side = document.getElementById('stopMarketSide').value;
+        const side = stopMarketSide.value;
         const stopPrice = Number(stopMarketPrice.value);
+        const quantity = Number(stopMarketQuantity.value);
         const currentPrice = candles[candles.length - 1].close;
-        stopMarketStatus.textContent = side + ' stop market order placed for ' + activeCoin.symbol + ' at ' + formatPrice(stopPrice) + ' (current price ' + formatPrice(currentPrice) + ').';
+        stopMarketStatus.textContent = side + ' market order placed for ' + quantity + ' ' + activeCoin.symbol + ' at ' + formatPrice(stopPrice) + ' (current price ' + formatPrice(currentPrice) + ').';
       });
     </script>
     <script src="script.js"></script>

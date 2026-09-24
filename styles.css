@@ -1189,16 +1189,18 @@ canvas {
 
 .positions-chart-wrap {
   position: relative;
-  min-height: 320px;
+  height: 320px;
+  min-height: 260px;
   margin-top: 1rem;
   border: 1px solid rgba(212, 175, 55, .2);
   background: rgba(0, 0, 0, .2);
+  overflow: hidden;
 }
 
 #positionsCandleChart {
   display: block;
   width: 100%;
-  height: 320px;
+  height: 100%;
 }
 
 #positionsChartStatus {
@@ -1222,15 +1224,55 @@ canvas {
 }
 
 .positions-buy-button {
-  background: #168b60;
-  border-color: #31d598;
+  background: #168b60 !important;
+  border-color: #31d598 !important;
   color: var(--white);
 }
 
+.positions-buy-button:hover,
+.positions-buy-button:focus-visible {
+  background: #20ad78 !important;
+  border-color: #64efb5 !important;
+}
+
 .positions-sell-button {
-  background: #a6394a;
-  border-color: #ff6b7a;
+  background: #a6394a !important;
+  border-color: #ff6b7a !important;
   color: var(--white);
+}
+
+.positions-sell-button:hover,
+.positions-sell-button:focus-visible {
+  background: #c94c5e !important;
+  border-color: #ff9aa7 !important;
+}
+
+.positions-chart-resizer {
+  position: absolute;
+  right: .45rem;
+  bottom: .35rem;
+  width: 2.2rem;
+  height: .55rem;
+  border: 0;
+  border-top: 2px solid rgba(245, 245, 245, .65);
+  border-bottom: 2px solid rgba(245, 245, 245, .65);
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: .75;
+}
+
+.positions-chart-resizer::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: .14rem;
+  border-top: 2px solid rgba(245, 245, 245, .65);
+}
+
+.positions-chart-resizer:hover,
+.positions-chart-resizer:focus-visible {
+  opacity: 1;
 }
 
 .chart-header {
@@ -1407,6 +1449,185 @@ canvas {
   }
 }
 
+.favorite-panel {
+  margin: 1.5rem 0 2rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.favorite-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+}
+
+.favorite-panel h3 {
+  color: var(--primary-gold);
+  margin-top: .3rem;
+}
+
+.favorite-panel-head p,
+.favorite-analysis-status {
+  color: var(--light-gold);
+  font-size: .78rem;
+  margin-top: .35rem;
+}
+
+.favorite-add-control {
+  min-width: min(100%, 300px);
+}
+
+.favorite-add-control label {
+  display: block;
+  color: var(--light-gold);
+  font-size: .75rem;
+  margin-bottom: .35rem;
+}
+
+.favorite-add-row {
+  display: flex;
+  gap: .5rem;
+}
+
+.favorite-add-row select {
+  min-width: 0;
+  flex: 1;
+  background: rgba(212, 175, 55, 0.1);
+  color: var(--primary-gold);
+  border: 1px solid var(--primary-gold);
+  border-radius: 4px;
+  padding: .65rem .7rem;
+}
+
+.favorite-add-row .btn {
+  padding: .65rem .9rem;
+}
+
+.favorite-slider {
+  display: flex;
+  align-items: stretch;
+  gap: .65rem;
+  margin-top: 1.1rem;
+}
+
+.favorite-cards {
+  display: flex;
+  flex: 1;
+  gap: .75rem;
+  min-width: 0;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary-gold) rgba(212, 175, 55, .1);
+  padding-bottom: .3rem;
+}
+
+.favorite-card {
+  position: relative;
+  flex: 0 0 190px;
+  min-height: 112px;
+  padding: .9rem;
+  border: 1px solid rgba(212, 175, 55, .35);
+  border-radius: 6px;
+  background: rgba(212, 175, 55, .06);
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease, transform .2s ease;
+}
+
+.favorite-card:hover,
+.favorite-card:focus-visible,
+.favorite-card.is-active {
+  border-color: var(--primary-gold);
+  background: rgba(212, 175, 55, .14);
+  transform: translateY(-2px);
+}
+
+.favorite-card:focus-visible {
+  outline: 2px solid var(--gold-soft);
+  outline-offset: 2px;
+}
+
+.favorite-card-top,
+.favorite-card-value {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+}
+
+.favorite-card-top strong {
+  color: var(--primary-gold);
+  font-size: 1rem;
+}
+
+.favorite-card-top span,
+.favorite-card-label {
+  color: var(--light-gold);
+  font-size: .72rem;
+}
+
+.favorite-card-value {
+  margin-top: .85rem;
+}
+
+.favorite-card-value strong {
+  color: var(--white);
+  font-size: .9rem;
+}
+
+.favorite-card-change.positive {
+  color: #31d598;
+}
+
+.favorite-card-change.negative {
+  color: #ff6b7a;
+}
+
+.favorite-empty {
+  width: 100%;
+  padding: .9rem;
+  border: 1px dashed rgba(212, 175, 55, .35);
+  color: var(--light-gold);
+  font-size: .78rem;
+  text-align: center;
+}
+
+.favorite-remove {
+  position: absolute;
+  right: .45rem;
+  bottom: .35rem;
+  border: 0;
+  background: transparent;
+  color: var(--light-gold);
+  cursor: pointer;
+  font-size: .7rem;
+  padding: .2rem;
+}
+
+.favorite-remove:hover,
+.favorite-remove:focus-visible {
+  color: var(--primary-gold);
+}
+
+.favorite-slide-btn {
+  align-self: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid var(--primary-gold);
+  border-radius: 50%;
+  background: rgba(212, 175, 55, .08);
+  color: var(--primary-gold);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.favorite-slide-btn:hover,
+.favorite-slide-btn:focus-visible {
+  background: var(--primary-gold);
+  color: var(--black);
+}
+
 .bot-layout {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1562,6 +1783,43 @@ canvas {
   font-size: 1rem;
 }
 
+.bot-chart-wrap {
+  position: relative;
+  height: 320px;
+  min-height: 260px;
+  width: 100%;
+  min-width: 320px;
+  overflow: hidden;
+  border: 1px solid rgba(212, 175, 55, .2);
+  background: rgba(0, 0, 0, .2);
+}
+
+#botCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.bot-chart-resizer {
+  position: absolute;
+  right: .45rem;
+  bottom: .35rem;
+  width: .75rem;
+  height: .75rem;
+  border: 0;
+  border-right: 2px solid rgba(245, 245, 245, .7);
+  border-bottom: 2px solid rgba(245, 245, 245, .7);
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: .75;
+  touch-action: none;
+}
+
+.bot-chart-resizer:hover,
+.bot-chart-resizer:focus-visible {
+  opacity: 1;
+}
+
 .bot-market-status {
   color: var(--light-gold);
   font-size: .78rem;
@@ -1603,6 +1861,7 @@ canvas {
 
 .bot-actions {
   display: flex;
+  justify-content: center;
   gap: 1rem;
   margin-top: 1.5rem;
 }
@@ -1785,6 +2044,19 @@ canvas {
   font-family: inherit;
 }
 
+.coin-publish-button {
+  background: #168b60;
+  border-color: #31d598;
+  color: var(--white);
+}
+
+.coin-publish-button:hover,
+.coin-publish-button:focus-visible {
+  background: #20ad78;
+  border-color: #64efb5;
+  color: var(--white);
+}
+
 .custom-coin-list h3 {
   color: var(--primary-gold);
   margin-bottom: 1.5rem;
@@ -1846,17 +2118,19 @@ canvas {
 }
 
 .coin-chart-wrap {
-  min-height: 310px;
+  height: 310px;
+  min-height: 260px;
   margin: 1.25rem 0;
   position: relative;
   border: 1px solid rgba(212, 175, 55, .2);
   background: rgba(0, 0, 0, .2);
+  overflow: hidden;
 }
 
 #coinCandleChart {
   display: block;
   width: 100%;
-  height: 310px;
+  height: 100%;
 }
 
 .coin-chart-empty {
@@ -1905,16 +2179,72 @@ canvas {
   font: inherit;
 }
 
+#stopMarketSide,
+#stopMarketSide option {
+  background: #000;
+  color: var(--white);
+}
+
 .btn-danger {
-  background: #b63b4d;
-  border-color: #e66a7b;
+  background: #b3263d !important;
+  border-color: #ff5c73 !important;
   color: var(--white);
   white-space: nowrap;
 }
 
 .btn-danger:hover {
-  background: #d44c5e;
-  border-color: #ff9aa7;
+  background: #d93650 !important;
+  border-color: #ff9eac !important;
+}
+
+.btn-danger:focus-visible {
+  outline: 2px solid #ff9eac;
+  outline-offset: 2px;
+}
+
+.btn-buy-market {
+  background: #168b60 !important;
+  border-color: #31d598 !important;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+.btn-buy-market:hover {
+  background: #20ad78 !important;
+  border-color: #64efb5 !important;
+}
+
+.btn-buy-market:focus-visible {
+  outline: 2px solid #64efb5;
+  outline-offset: 2px;
+}
+
+.coin-chart-resizer {
+  position: absolute;
+  right: .45rem;
+  bottom: .35rem;
+  width: 2.2rem;
+  height: .55rem;
+  border: 0;
+  border-top: 2px solid rgba(245, 245, 245, .65);
+  border-bottom: 2px solid rgba(245, 245, 245, .65);
+  background: transparent;
+  cursor: nwse-resize;
+  opacity: .75;
+}
+
+.coin-chart-resizer::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: .14rem;
+  border-top: 2px solid rgba(245, 245, 245, .65);
+}
+
+.coin-chart-resizer:hover,
+.coin-chart-resizer:focus-visible {
+  opacity: 1;
 }
 
 .coin-order-status {
