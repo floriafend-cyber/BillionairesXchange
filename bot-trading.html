@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Makings | Bot Trading</title>
+    <title>BillionairesXchange | Bot Trading</title>
     <meta
       name="description"
-      content="Makings Bot Trading - Automated trading with customizable settings, stop-loss, and take-profits"
+      content="BillionairesXchange Bot Trading - Automated trading with customizable settings, stop-loss, and take-profits"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -21,7 +21,7 @@
       <div class="brand-wrap">
         <div class="brand-mark">M</div>
         <div>
-          <p class="brand-name">Makings</p>
+          <p class="brand-name">BillionairesXchange</p>
           <small>Crypto Trading & Investment</small>
         </div>
       </div>
@@ -127,6 +127,7 @@
 
             <div class="manual-trading">
               <h4>Manual Trade Controls</h4>
+              <p class="ai-trade-rule">Manual orders follow the AI recommendation only.</p>
               <label>
                 Order size (coin units)
                 <input type="number" id="manualOrderSize" min="0.01" step="0.01" value="0.5" />
@@ -172,6 +173,23 @@
               </div>
             </div>
 
+            <div class="ai-analyst" aria-live="polite">
+              <div class="ai-analyst-heading">
+                <div>
+                  <span class="eyebrow">Built-in AI market analyst</span>
+                  <h3 id="aiRecommendation">Waiting for market data</h3>
+                </div>
+                <span class="ai-confidence" id="aiConfidence">--</span>
+              </div>
+              <p id="aiReason">Select a coin to receive a technical market analysis.</p>
+              <div class="ai-signal-grid">
+                <span>Momentum <strong id="aiMomentum">--</strong></span>
+                <span>Trend <strong id="aiTrend">--</strong></span>
+                <span>Volatility <strong id="aiVolatility">--</strong></span>
+              </div>
+              <small id="aiUpdated">Analysis updates every bot cycle.</small>
+            </div>
+
             <div class="bot-performance">
               <h4>Bot Performance</h4>
               <div class="bot-metrics">
@@ -192,7 +210,8 @@
                   <strong id="botTrades">0</strong>
                 </div>
               </div>
-              <canvas id="botCanvas" width="600" height="240" aria-label="Trading bot live chart"></canvas>
+              <canvas id="botCanvas" width="600" height="240" aria-label="BillionairesXchange live trading bot chart"></canvas>
+              <p id="botMarketStatus" class="bot-market-status">Select a coin to connect its live spot market.</p>
             </div>
 
             <div class="leaderboard-wrap">
@@ -235,7 +254,7 @@
     </main>
 
     <footer class="site-footer">
-      <p>© 2026 Makings | Crypto, investment, and secure digital trading.</p>
+      <p>© 2024 BillionairesXchange | Crypto, investment, and secure digital trading.</p>
     </footer>
 
     <div id="toast" class="toast" aria-live="polite">Welcome to Makings Bot Trading.</div>
@@ -259,6 +278,17 @@
       const manualOrderSize = document.getElementById('manualOrderSize');
       const manualBuyBtn = document.getElementById('manualBuyBtn');
       const manualSellBtn = document.getElementById('manualSellBtn');
+      const botMarketStatus = document.getElementById('botMarketStatus');
+      const aiRecommendation = document.getElementById('aiRecommendation');
+      const aiConfidence = document.getElementById('aiConfidence');
+      const aiReason = document.getElementById('aiReason');
+      const aiMomentum = document.getElementById('aiMomentum');
+      const aiTrend = document.getElementById('aiTrend');
+      const aiVolatility = document.getElementById('aiVolatility');
+      const aiUpdated = document.getElementById('aiUpdated');
+
+      manualBuyBtn.disabled = true;
+      manualSellBtn.disabled = true;
 
       const botState = {
         running: false,
@@ -269,6 +299,9 @@
         wins: 0,
         losses: 0,
         position: null,
+        analysis: null,
+        marketSocket: null,
+        marketSymbol: null,
         history: [65000, 65750, 66100, 66420, 66380, 66940, 67150]
       };
 
@@ -282,6 +315,8 @@
         DOGE: 0.18,
         USDT: 1
       };
+
+      const marketPairs = { BTC: 'BTCUSDT', ETH: 'ETHUSDT', XRP: 'XRPUSDT', SOL: 'SOLUSDT', ADA: 'ADAUSDT', DOT: 'DOTUSDT', DOGE: 'DOGEUSDT' };
 
       const leaderboardScores = {
         Momentum: 86,
@@ -353,6 +388,45 @@
         }
       }
 
+      function notifyTrade(message, type = 'success') {
+        addFeedItem(message);
+        showToast(message, type);
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Makings AI trading bot', { body: message });
+        }
+      }
+
+      function analyzeMarket(symbol, price) {
+        const history = botState.history;
+        const recent = history.slice(-6);
+        const previous = history.slice(-12, -6);
+        const shortAverage = recent.reduce((sum, value) => sum + value, 0) / recent.length;
+        const longAverage = history.slice(-20).reduce((sum, value) => sum + value, 0) / Math.min(history.length, 20);
+        const momentum = ((recent[recent.length - 1] - recent[0]) / recent[0]) * 100;
+        const priorMomentum = previous.length ? ((previous[previous.length - 1] - previous[0]) / previous[0]) * 100 : 0;
+        const trend = ((shortAverage - longAverage) / longAverage) * 100;
+        const volatility = (Math.max(...recent) - Math.min(...recent)) / price * 100;
+        const score = (momentum * 4) + (trend * 3) + ((momentum - priorMomentum) * 2);
+        const action = score >= 0 ? 'BUY' : 'SELL';
+        const confidence = Math.min(96, Math.max(55, 55 + Math.abs(score) * 8));
+        const reason = `${symbol} shows ${momentum >= 0 ? 'positive' : 'negative'} momentum, a ${trend >= 0 ? 'rising' : 'falling'} short-term trend, and ${volatility.toFixed(2)}% recent volatility.`;
+
+        botState.analysis = { action, confidence, momentum, trend, volatility, reason, price };
+        aiRecommendation.textContent = `${action} only`;
+        aiRecommendation.className = action === 'BUY' ? 'ai-buy' : 'ai-sell';
+        aiConfidence.textContent = `${confidence.toFixed(0)}% confidence`;
+        aiReason.textContent = reason;
+        aiMomentum.textContent = `${momentum >= 0 ? '+' : ''}${momentum.toFixed(2)}%`;
+        aiTrend.textContent = trend >= 0 ? 'Bullish' : 'Bearish';
+        aiVolatility.textContent = `${volatility.toFixed(2)}%`;
+        aiUpdated.textContent = `Analyzed at ${new Date().toLocaleTimeString()}. The bot will take ${action} trades only.`;
+        manualBuyBtn.disabled = action !== 'BUY';
+        manualSellBtn.disabled = action !== 'SELL';
+        manualBuyBtn.textContent = action === 'BUY' ? 'AI Buy now' : 'Buy blocked by AI';
+        manualSellBtn.textContent = action === 'SELL' ? 'AI Sell now' : 'Sell blocked by AI';
+        return botState.analysis;
+      }
+
       function renderBotChart() {
         const ctx = botCanvas.getContext('2d');
         const width = botCanvas.width;
@@ -383,6 +457,46 @@
         ctx.shadowBlur = 0;
       }
 
+      async function connectLiveMarket(symbol) {
+        if (botState.marketSocket) botState.marketSocket.close();
+        const pair = marketPairs[symbol];
+        if (!pair) {
+          botState.marketSymbol = null;
+          botMarketStatus.textContent = 'Live spot data is unavailable for this selection.';
+          return;
+        }
+
+        botState.marketSymbol = pair;
+        botMarketStatus.textContent = `Connecting to BillionairesXchange ${symbol}/USDT spot live...`;
+        try {
+          const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1m&limit=30`);
+          if (!response.ok) throw new Error('Live candles unavailable');
+          const candles = await response.json();
+          botState.history = candles.map((candle) => Number(candle[4]));
+          coinPrices[symbol] = botState.history[botState.history.length - 1];
+          botMarketStatus.textContent = `BillionairesXchange ${symbol}/USDT spot live`;
+          renderBotChart();
+        } catch (error) {
+          botMarketStatus.textContent = 'Live spot data is temporarily unavailable.';
+        }
+
+        botState.marketSocket = new WebSocket(`wss://stream.binance.com:9443/ws/${pair.toLowerCase()}@kline_1m`);
+        botState.marketSocket.onmessage = (event) => {
+          const candle = JSON.parse(event.data).k;
+          if (!candle || botState.marketSymbol !== pair) return;
+          const price = Number(candle.c);
+          coinPrices[symbol] = price;
+          if (candle.x) {
+            botState.history.push(price);
+            if (botState.history.length > 30) botState.history.shift();
+          }
+          renderBotChart();
+        };
+        botState.marketSocket.onerror = () => {
+          botMarketStatus.textContent = 'Live spot connection unavailable.';
+        };
+      }
+
       function updateStatusLabel() {
         const label = botState.running ? 'Bot running live' : 'Bot paused';
         botStatus.innerHTML = `<span class="dot" style="background:${botState.running ? '#00ff00' : '#ffb000'}"></span>${label}`;
@@ -393,13 +507,10 @@
         const selectedRisk = riskMap[riskLevel.value] || 0.06;
         const stopLoss = Number(stopLossInput.value) || 5;
         const takeProfit = Number(takeProfitInput.value) || 10;
-        const strategyName = strategy.value;
 
-        if (!botState.position) {
-          const momentumBias = (Math.random() * 2 - 1) * 0.06;
-          const shouldBuy = strategyName === 'Momentum' ? momentumBias > -0.01 : Math.random() > 0.42;
+        const analysis = analyzeMarket(symbol, tradePrice);
 
-          if (shouldBuy) {
+        if (!botState.position && analysis.action === 'BUY') {
             const size = Math.min((botState.balance * selectedRisk) / tradePrice, 2.5);
             botState.position = {
               symbol,
@@ -410,16 +521,14 @@
               strategy: strategyName
             };
             botState.balance -= size * tradePrice;
-            addFeedItem(`${symbol} buy signal triggered at ${formatMoney(tradePrice)}.`);
-            showToast(`Bot bought ${symbol} at ${formatMoney(tradePrice)}.`, 'success');
+            notifyTrade(`AI BUY: ${symbol} at ${formatMoney(tradePrice)} (${analysis.confidence.toFixed(0)}% confidence).`);
             return;
-          }
         }
 
         if (botState.position && botState.position.symbol === symbol) {
           const movePct = ((tradePrice - botState.position.entry) / botState.position.entry) * 100;
 
-          if (movePct >= botState.position.takeProfit || movePct <= -botState.position.stopLoss) {
+          if (analysis.action === 'SELL' || movePct >= botState.position.takeProfit || movePct <= -botState.position.stopLoss) {
             const exitValue = botState.position.size * tradePrice;
             const result = exitValue - (botState.position.size * botState.position.entry);
             botState.pnl += result;
@@ -428,11 +537,9 @@
 
             if (result > 0) {
               botState.wins += 1;
-              addFeedItem(`${symbol} closed profit at ${formatMoney(tradePrice)}. +${formatMoney(result)}.`);
-              showToast(`Trade success: ${symbol} gained ${formatMoney(result)}.`, 'success');
+              notifyTrade(`AI SELL: ${symbol} closed at ${formatMoney(tradePrice)}. Profit ${formatMoney(result)}.`);
             } else {
-              addFeedItem(`${symbol} closed loss at ${formatMoney(tradePrice)}. ${formatMoney(result)}.`);
-              showToast(`Trade loss: ${symbol} lost ${formatMoney(Math.abs(result))}.`, 'loss');
+              notifyTrade(`AI SELL: ${symbol} closed at ${formatMoney(tradePrice)}. Loss ${formatMoney(Math.abs(result))}.`, 'loss');
             }
 
             botState.position = null;
@@ -447,12 +554,8 @@
         }
 
         const symbol = coinSelect.value;
-        const price = coinPrices[symbol] || 100;
-        const move = (Math.random() - 0.5) * (symbol === 'USDT' ? 0.01 : 0.09);
-        const nextPrice = price * (1 + move);
-        coinPrices[symbol] = Number(nextPrice.toFixed(symbol === 'BTC' ? 2 : 4));
-        botState.history.push(nextPrice);
-        if (botState.history.length > 30) botState.history.shift();
+        const nextPrice = coinPrices[symbol] || 100;
+        if (!botState.marketSymbol && symbol !== 'USDT') return;
 
         decideTrade(symbol, nextPrice);
         renderBotChart();
@@ -470,6 +573,12 @@
         const currentPrice = coinPrices[symbol] || 100;
         const total = currentPrice * quantity;
 
+        const analysis = analyzeMarket(symbol, currentPrice);
+        if (analysis.action.toLowerCase() !== direction) {
+          showToast(`Manual ${direction} blocked. AI recommends ${analysis.action} only.`, 'warning');
+          return;
+        }
+
         if (direction === 'buy') {
           if (total > botState.balance) {
             showToast('Not enough balance for this order.', 'warning');
@@ -481,7 +590,7 @@
           botState.wins += 1;
           botState.pnl += 0;
           addFeedItem(`Manual buy: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
-          showToast(`Manual buy successful: ${symbol} added to holdings.`, 'success');
+          notifyTrade(`AI BUY: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
         }
 
         if (direction === 'sell') {
@@ -489,18 +598,22 @@
           botState.balance += marketValue;
           botState.trades += 1;
           addFeedItem(`Manual sell: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
-          showToast(`Manual sell successful: ${symbol} sold for ${formatMoney(marketValue)}.`, 'success');
+          notifyTrade(`AI SELL: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
         }
 
         updatePerformancePanel();
       }
 
       coinSelect.addEventListener('change', updateSummary);
+      coinSelect.addEventListener('change', () => connectLiveMarket(coinSelect.value));
       durationSelect.addEventListener('change', updateSummary);
       stopLossInput.addEventListener('input', updateSummary);
       takeProfitInput.addEventListener('input', updateSummary);
       riskLevel.addEventListener('change', updateSummary);
       strategy.addEventListener('change', updateSummary);
+      coinSelect.addEventListener('change', () => {
+        if (coinSelect.value) analyzeMarket(coinSelect.value, coinPrices[coinSelect.value] || 100);
+      });
 
       document.getElementById('startBotBtn').addEventListener('click', function() {
         if (!coinSelect.value || !durationSelect.value) {
@@ -514,6 +627,7 @@
         }
 
         botState.running = true;
+        if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
         updateStatusLabel();
         this.disabled = true;
         document.getElementById('pauseBotBtn').disabled = false;
