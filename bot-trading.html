@@ -250,6 +250,17 @@
               <p id="botMarketStatus" class="bot-market-status">Select a coin to connect its live spot market.</p>
             </div>
 
+            <div class="bot-positions-panel">
+              <div class="bot-positions-heading">
+                <div>
+                  <span class="eyebrow">Positions</span>
+                  <h4>Open positions</h4>
+                </div>
+                <span class="bot-positions-count" id="botPositionsCount">0 active</span>
+              </div>
+              <div class="bot-positions-list" id="botPositionsList" aria-live="polite"></div>
+            </div>
+
             <div class="leaderboard-wrap">
               <h4>Strategy leaderboard</h4>
               <ul id="leaderboardList" class="leaderboard-list"></ul>
@@ -346,7 +357,8 @@
         analysis: null,
         marketSocket: null,
         marketSymbol: null,
-        history: [65000, 65750, 66100, 66420, 66380, 66940, 67150]
+        history: [65000, 65750, 66100, 66420, 66380, 66940, 67150],
+        positionRecords: JSON.parse(localStorage.getItem('botPositionRecords') || '[]')
       };
 
       const coinPrices = {
@@ -420,6 +432,84 @@
         const favoriteOption = option.cloneNode(true);
         favoriteCoinSelect.appendChild(favoriteOption);
       });
+
+      function savePositionRecords() {
+        localStorage.setItem('botPositionRecords', JSON.stringify(botState.positionRecords));
+      }
+
+      function formatPositionTime(timestamp) {
+        return timestamp ? new Date(timestamp).toLocaleString() : '--';
+      }
+
+      function getPositionMarketCap(symbol) {
+        return getFavoriteMarketData(symbol).marketCap || 0;
+      }
+
+      function renderPositionRecords() {
+        const list = document.getElementById('botPositionsList');
+        const count = document.getElementById('botPositionsCount');
+        const active = botState.positionRecords.filter((record) => record.status === 'OPEN').length;
+        count.textContent = `${active} active`;
+        list.replaceChildren();
+
+        if (!botState.positionRecords.length) {
+          const empty = document.createElement('p');
+          empty.className = 'bot-positions-empty';
+          empty.textContent = 'AI buy and sell positions will appear here.';
+          list.appendChild(empty);
+          return;
+        }
+
+        [...botState.positionRecords].reverse().forEach((record) => {
+          const item = document.createElement('article');
+          item.className = 'bot-position-record';
+          const status = record.status === 'OPEN' ? 'OPEN' : 'CLOSED';
+          item.innerHTML = `
+            <div class="bot-position-title"><strong>${record.symbol}</strong><span class="bot-position-status ${status.toLowerCase()}">${status}</span></div>
+            <div class="bot-position-grid">
+              <span>Amount<strong>${formatMoney(record.amount)}</strong></span>
+              <span>Quantity<strong>${record.quantity}</strong></span>
+              <span>Market cap<strong>${formatCompactMoney(record.marketCap)}</strong></span>
+              <span>Open price<strong>${formatMoney(record.openPrice)}</strong></span>
+              <span>Open time<strong>${formatPositionTime(record.openedAt)}</strong></span>
+              <span>Close price<strong>${record.closePrice ? formatMoney(record.closePrice) : '--'}</strong></span>
+              <span>Close time<strong>${formatPositionTime(record.closedAt)}</strong></span>
+            </div>
+          `;
+          list.appendChild(item);
+        });
+      }
+
+      function openPositionRecord(symbol, quantity, price, source = 'AI') {
+        const record = {
+          id: `${symbol}-${Date.now()}`,
+          symbol,
+          quantity,
+          amount: quantity * price,
+          marketCap: getPositionMarketCap(symbol),
+          openPrice: price,
+          openedAt: Date.now(),
+          closePrice: null,
+          closedAt: null,
+          status: 'OPEN',
+          source
+        };
+        botState.positionRecords.push(record);
+        savePositionRecords();
+        renderPositionRecords();
+        return record;
+      }
+
+      function closePositionRecord(symbol, price, quantity = null) {
+        const record = [...botState.positionRecords].reverse().find((item) => item.symbol === symbol && item.status === 'OPEN' && (!quantity || item.quantity >= quantity));
+        if (!record) return null;
+        record.closePrice = price;
+        record.closedAt = Date.now();
+        record.status = 'CLOSED';
+        savePositionRecords();
+        renderPositionRecords();
+        return record;
+      }
 
       const leaderboardScores = {
         Momentum: 86,
@@ -809,6 +899,7 @@
               strategy: strategy.value
             };
             botState.balance -= size * tradePrice;
+            openPositionRecord(symbol, size, tradePrice, 'AI bot');
             notifyTrade(`AI BUY: ${symbol} at ${formatMoney(tradePrice)} (${analysis.confidence.toFixed(0)}% confidence).`);
             return;
         }
@@ -830,6 +921,7 @@
               notifyTrade(`AI SELL: ${symbol} closed at ${formatMoney(tradePrice)}. Loss ${formatMoney(Math.abs(result))}.`, 'loss');
             }
 
+            closePositionRecord(symbol, tradePrice, botState.position.size);
             botState.position = null;
             updatePerformancePanel();
           }
@@ -877,6 +969,7 @@
           botState.trades += 1;
           botState.wins += 1;
           botState.pnl += 0;
+          openPositionRecord(symbol, quantity, currentPrice, 'Manual AI buy');
           addFeedItem(`Manual buy: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
           notifyTrade(`AI BUY: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
         }
@@ -885,6 +978,7 @@
           const marketValue = currentPrice * quantity;
           botState.balance += marketValue;
           botState.trades += 1;
+          closePositionRecord(symbol, currentPrice, quantity);
           addFeedItem(`Manual sell: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
           notifyTrade(`AI SELL: ${quantity} ${symbol} at ${formatMoney(currentPrice)}.`);
         }
@@ -1002,6 +1096,7 @@
       updateLeaderboard();
       updateStatusLabel();
       updatePerformancePanel();
+      renderPositionRecords();
       window.addEventListener('resize', renderBotChart);
       renderBotChart();
     </script>
